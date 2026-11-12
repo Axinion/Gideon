@@ -85,6 +85,17 @@ export function InputArea() {
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    const handleSuggestedPrompt = (event: Event) => {
+      const prompt = (event as CustomEvent<string>).detail;
+      if (typeof prompt !== 'string') return;
+      setInput(prompt);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+    window.addEventListener('jarvis:prompt', handleSuggestedPrompt);
+    return () => window.removeEventListener('jarvis:prompt', handleSuggestedPrompt);
+  }, []);
+
   const activeId = useAppStore((s) => s.activeId);
   const selectedModel = useAppStore((s) => s.selectedModel);
   const streamState = useAppStore((s) => s.streamState);
@@ -100,6 +111,10 @@ export function InputArea() {
   const modelLoading = useAppStore((s) => s.modelLoading);
   const deepResearch = useAppStore((s) => s.deepResearch);
   const setDeepResearch = useAppStore((s) => s.setDeepResearch);
+  const usingChatGPTPlan = selectedModel.startsWith('chatgpt/');
+  useEffect(() => {
+    if (usingChatGPTPlan && deepResearch) setDeepResearch(false);
+  }, [usingChatGPTPlan, deepResearch, setDeepResearch]);
   const corpusSync = useResearchCorpusSync(deepResearch);
   const isCurrentChatStreaming = streamState.isStreaming && streamState.conversationId === activeId;
 
@@ -250,7 +265,7 @@ export function InputArea() {
     });
 
     try {
-      if (deepResearch) {
+      if (deepResearch && !usingChatGPTPlan) {
         for await (const ev of streamResearch(
           content,
           selectedModel,
@@ -459,8 +474,9 @@ export function InputArea() {
         if (!accumulatedContent) accumulatedContent = '(Generation stopped)';
       } else {
         const errMsg = err?.message || String(err);
-        accumulatedContent =
-          accumulatedContent || `Error: ${errMsg}`;
+        accumulatedContent = usingChatGPTPlan && accumulatedContent
+          ? `${accumulatedContent}\n\nChatGPT stopped: ${errMsg}`
+          : accumulatedContent || `Error: ${errMsg}`;
         useAppStore.getState().addLogEntry({
           timestamp: Date.now(), level: 'error', category: 'chat',
           message: `Stream error: ${errMsg}`,
@@ -533,7 +549,7 @@ export function InputArea() {
       // `done` event's usage payload — re-fetching here would overwrite
       // it with a potentially stale snapshot if the server's research
       // telemetry hasn't been merged into /v1/savings yet.
-      if (!deepResearch) {
+      if (!deepResearch && !usingChatGPTPlan) {
         fetchSavings()
           .then((data) => useAppStore.getState().setSavings(data))
           .catch(() => {});
@@ -550,6 +566,7 @@ export function InputArea() {
     setStreamState,
     resetStream,
     deepResearch,
+    usingChatGPTPlan,
     temperature,
     maxTokens,
   ]);
@@ -562,15 +579,28 @@ export function InputArea() {
   };
 
   return (
-    <div className="px-4 pb-4 pt-2" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
-      <div className="mb-2 flex flex-col gap-1">
-        <div className="flex items-center gap-2">
+    <div className="jarvis-composer-wrap" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
+      <div className="jarvis-composer">
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={selectedModel ? 'Ask Gideon anything...' : 'Pick a model first (⌘K)...'}
+          aria-label="Message Gideon"
+          rows={1}
+          className="jarvis-composer-textarea"
+          style={{ maxHeight: '200px' }}
+          disabled={streamState.isStreaming || modelLoading}
+        />
+        <div className="jarvis-composer-bottom">
+          <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setDeepResearch(!deepResearch)}
-            disabled={streamState.isStreaming}
+            disabled={streamState.isStreaming || usingChatGPTPlan}
             aria-pressed={deepResearch}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+            className="jarvis-research-toggle inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
             style={{
               background: deepResearch ? 'var(--color-accent-subtle)' : 'transparent',
               border: `1px solid ${deepResearch ? 'var(--color-accent)' : 'var(--color-border)'}`,
@@ -581,39 +611,10 @@ export function InputArea() {
             <Search size={12} />
             Deep Research
           </button>
+          <span className="jarvis-composer-model"><span className="jarvis-live-dot" /> {usingChatGPTPlan ? 'Using ChatGPT plan' : selectedModel || 'No model'}</span>
+          {usingChatGPTPlan && <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" className="text-[11px]" style={{ color: 'var(--color-accent)' }}>Manage usage</a>}
         </div>
-        {deepResearch && corpusSync.syncing && corpusSync.itemsSynced > 0 && (
-          <div
-            className="text-[11px] leading-snug"
-            style={{ color: 'var(--color-text-tertiary)' }}
-          >
-            Searching over{' '}
-            <span key={corpusSync.itemsSynced} className="sync-bump" style={{ color: 'var(--color-text-secondary)' }}>
-              {corpusSync.itemsSynced.toLocaleString()}
-            </span>{' '}
-            items — sync in progress, results will improve as more data is indexed.
-          </div>
-        )}
-      </div>
-      <div
-        className="flex items-center gap-2 rounded-2xl px-4 py-3 transition-shadow"
-        style={{
-          background: 'var(--color-input-bg)',
-          border: '1px solid var(--color-input-border)',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={selectedModel ? 'Message OpenJarvis...' : 'Pick a model first (⌘K)...'}
-          rows={1}
-          className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed"
-          style={{ color: 'var(--color-text)', maxHeight: '200px' }}
-          disabled={streamState.isStreaming || modelLoading}
-        />
+        <div className="flex items-center gap-1">
         {isCurrentChatStreaming ? (
           <button
             onClick={stopStreaming}
@@ -645,12 +646,14 @@ export function InputArea() {
             </button>
           </div>
         )}
+        </div>
+        </div>
       </div>
-      <div className="flex items-center justify-center mt-2 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        <span>
-          <kbd className="font-mono">Enter</kbd> to send &middot;{' '}
-          <kbd className="font-mono">Shift+Enter</kbd> for new line
-        </span>
+      {deepResearch && corpusSync.syncing && corpusSync.itemsSynced > 0 && (
+        <div className="jarvis-composer-hint">Searching over {corpusSync.itemsSynced.toLocaleString()} items — sync in progress.</div>
+      )}
+      <div className="jarvis-composer-footnote">
+        <span>Private by design · Running on your Mac</span><span><kbd>↵</kbd> send &nbsp; <kbd>⇧ ↵</kbd> new line</span>
       </div>
     </div>
   );

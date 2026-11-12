@@ -74,6 +74,9 @@ export function ApprovalBell() {
 
   const count = approvals.length;
 
+  // Keep the workspace toolbar clear when there is nothing to review.
+  if (count === 0) return null;
+
   return (
     <div ref={containerRef} className="fixed top-2 right-3 z-40">
       {/* Bell trigger */}

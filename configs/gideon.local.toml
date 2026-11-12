@@ -1,0 +1,32 @@
+# Personal local defaults. Credentials and runtime data belong in .openjarvis/.
+[engine]
+default = "ollama"
+
+[engine.ollama]
+host = "http://127.0.0.1:11434"
+
+[intelligence]
+default_model = "qwen2.5:1.5b-instruct"
+provider = "local"
+
+[agent]
+default_agent = "simple"
+default_system_prompt = "You are Gideon, the user's personal AI assistant. Be helpful, concise, and accurate. When asked your name, say Gideon. You run on the OpenJarvis framework. If the selected model is local, it runs on this computer; if it is a ChatGPT plan model, it runs through OpenAI."
+
+[speech]
+backend = "faster-whisper"
+model = "base"
+tts_backend = "kokoro"
+voice_id = "bm_george"
+
+[server]
+host = "127.0.0.1"
+port = 8000
+agent = "simple"
+
+[analytics]
+enabled = false
+choice_recorded = true
+
+[traces]
+enabled = false

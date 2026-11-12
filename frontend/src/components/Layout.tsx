@@ -11,6 +11,18 @@ export function Layout() {
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
 
   useEffect(() => {
+    let wasNarrow = window.innerWidth < 768;
+    if (wasNarrow) useAppStore.getState().setSidebarOpen(false);
+    const handleResize = () => {
+      const isNarrow = window.innerWidth < 768;
+      if (isNarrow && !wasNarrow) useAppStore.getState().setSidebarOpen(false);
+      wasNarrow = isNarrow;
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
     const check = () => checkHealth().then(setApiReachable);
     check();
     const interval = setInterval(check, 30000);
@@ -44,7 +56,7 @@ export function Layout() {
             className="w-1.5 h-1.5 rounded-full shrink-0"
             style={{ background: 'var(--color-error)' }}
           />
-          <span>Cannot reach OpenJarvis backend</span>
+          <span>Cannot reach Gideon backend</span>
           <button
             onClick={() => navigate('/settings')}
             className="text-sm underline cursor-pointer ml-auto shrink-0"

@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+umask 077
+
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export OPENJARVIS_HOME="${OPENJARVIS_HOME:-$HERE/.openjarvis}"
+mkdir -p "$OPENJARVIS_HOME"
+
+if [ ! -f "$OPENJARVIS_HOME/config.toml" ]; then
+  cp "$HERE/configs/gideon.local.toml" "$OPENJARVIS_HOME/config.toml"
+fi
+
+if [ ! -x "$HERE/.venv/bin/jarvis" ]; then
+  echo "Gideon is not installed. Run: uv sync --extra desktop --extra voice" >&2
+  exit 1
+fi
+
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "Ollama is required for Gideon's local model. Install it from https://ollama.com/download" >&2
+  exit 1
+fi
+
+if ! curl -fsS --max-time 2 http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+  ollama serve >"$OPENJARVIS_HOME/ollama.log" 2>&1 &
+  attempts=0
+  until curl -fsS --max-time 2 http://127.0.0.1:11434/api/version >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 20 ]; then
+      echo "Ollama did not start. See $OPENJARVIS_HOME/ollama.log" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+fi
+
+cd "$HERE"
+exec .venv/bin/jarvis "$@"

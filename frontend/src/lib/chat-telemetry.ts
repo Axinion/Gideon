@@ -8,6 +8,7 @@ const CLOUD_PREFIXES = [
   'openrouter/',
   'MiniMax-',
   'chatgpt-',
+  'chatgpt/',
 ];
 
 export function engineFromCompletionChunk(data: unknown): string | undefined {

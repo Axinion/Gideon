@@ -141,6 +141,54 @@ export interface SetupStatus {
   requires_source: boolean;
 }
 
+export interface ChatGPTStatus {
+  connected: boolean;
+  plan_enabled: boolean;
+  email?: string;
+  profiles: Array<{ client_id: string; email: string; active: boolean }>;
+}
+
+export async function fetchChatGPTStatus(): Promise<ChatGPTStatus> {
+  const res = await apiFetch('/v1/chatgpt/status');
+  if (!res.ok) throw new Error(`ChatGPT connection check failed: ${res.status}`);
+  return res.json();
+}
+
+export async function startChatGPTConnection(newAccount = false): Promise<string> {
+  const res = await apiFetch('/v1/chatgpt/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_account: newAccount }),
+  });
+  if (!res.ok) throw new Error(`Could not start ChatGPT sign-in: ${res.status}`);
+  const data = await res.json();
+  return data.authorization_url;
+}
+
+export async function fetchChatGPTModels(): Promise<ModelInfo[]> {
+  const status = await fetchChatGPTStatus();
+  if (!status.plan_enabled) return [];
+  const res = await apiFetch('/v1/chatgpt/models');
+  if (!res.ok) throw new Error(`ChatGPT models unavailable: ${res.status}`);
+  const data = await res.json();
+  return data.data || [];
+}
+
+export async function disconnectChatGPT(): Promise<boolean> {
+  const res = await apiFetch('/v1/chatgpt/disconnect', { method: 'POST' });
+  if (!res.ok) throw new Error(`Could not disconnect ChatGPT: ${res.status}`);
+  const data = await res.json();
+  return !!data.remote_revoked;
+}
+
+export async function selectChatGPTProfile(clientId: string): Promise<void> {
+  const res = await apiFetch('/v1/chatgpt/select', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!res.ok) throw new Error(`Could not switch ChatGPT account: ${res.status}`);
+}
+
 export async function getSetupStatus(): Promise<SetupStatus | null> {
   if (!isTauri()) return null;
   try {
@@ -178,18 +226,26 @@ export async function resetInferenceSource(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function fetchModels(): Promise<ModelInfo[]> {
+  let local: ModelInfo[] = [];
   if (isTauri()) {
     try {
       const result = await tauriInvoke<{ data?: ModelInfo[] }>('fetch_models');
-      return result?.data || [];
+      local = result?.data || [];
     } catch {
       // Fall through to fetch
     }
   }
-  const res = await apiFetch(`/v1/models`);
-  if (!res.ok) throw new Error(`Failed to fetch models: ${res.status}`);
-  const data = await res.json();
-  return data.data || [];
+  if (!local.length) {
+    const res = await apiFetch(`/v1/models`);
+    if (!res.ok) throw new Error(`Failed to fetch models: ${res.status}`);
+    const data = await res.json();
+    local = data.data || [];
+  }
+  try {
+    return [...local, ...await fetchChatGPTModels()];
+  } catch {
+    return local;
+  }
 }
 
 export async function fetchRecommendedModel(): Promise<{ model: string; reason: string }> {
@@ -244,7 +300,7 @@ const _CLOUD_PREFIXES = ['gpt-', 'o1-', 'o3-', 'o4-', 'claude-', 'gemini-', 'ope
 
 export async function preloadModel(modelName: string, owner?: string): Promise<void> {
   // Cloud models don't need Ollama preloading
-  if (owner === 'litellm' || _CLOUD_PREFIXES.some(p => modelName.startsWith(p))) {
+  if (owner === 'litellm' || owner === 'chatgpt' || modelName.startsWith('chatgpt/') || _CLOUD_PREFIXES.some(p => modelName.startsWith(p))) {
     return;
   }
   // Trigger Ollama to load the model into memory (empty prompt, no generation).
@@ -1099,7 +1155,7 @@ export async function getMemoryStats(): Promise<MemoryStats> {
   try {
     res = await apiFetch(`/v1/memory/stats`);
   } catch {
-    throw new Error('Could not reach the OpenJarvis API. Check the server status and API URL, then retry.');
+    throw new Error('Could not reach the Gideon API. Check the server status and API URL, then retry.');
   }
   if (!res.ok) {
     const detail = await memoryErrorDetail(res, 'Memory status request failed');

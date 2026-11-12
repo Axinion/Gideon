@@ -17,6 +17,7 @@ import {
   Loader2,
   ScrollText,
   Database,
+  ExternalLink,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { useAppStore } from '../../lib/store';
@@ -68,8 +69,9 @@ export function Sidebar() {
       {!sidebarOpen && (
         <button
           onClick={toggleSidebar}
-          className="fixed top-3 left-3 z-30 p-2 rounded-lg transition-colors cursor-pointer"
-          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-secondary)' }}
+          className="jarvis-sidebar-toggle fixed top-3 left-3 z-30 p-2 rounded-lg transition-colors cursor-pointer"
+          aria-label="Open navigation"
+          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
         >
@@ -92,44 +94,31 @@ export function Sidebar() {
       >
         <div className="flex flex-col h-full w-[260px]">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 pt-3 pb-2">
+          <div className="jarvis-sidebar-header flex items-center justify-between px-4 pt-5 pb-5">
+            <div className="jarvis-brand">
+              <span className="jarvis-brand-mark">G</span>
+              <span className="jarvis-brand-copy"><strong>Gideon</strong><small>PERSONAL AI</small></span>
+            </div>
             <button
               onClick={toggleSidebar}
               className="p-2 rounded-lg transition-colors cursor-pointer"
               style={{ color: 'var(--color-text-secondary)' }}
+              aria-label="Close navigation"
               onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               <PanelLeftClose size={18} />
             </button>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => updateSettings({ theme: nextTheme })}
-                className="p-2 rounded-lg transition-colors cursor-pointer"
-                style={{ color: 'var(--color-text-secondary)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                title={`Theme: ${settings.theme} (click for ${nextTheme})`}
-              >
-                <ThemeIcon size={16} />
-              </button>
-              <button
-                onClick={handleNewChat}
-                className="p-2 rounded-lg transition-colors cursor-pointer"
-                style={{ color: 'var(--color-text-secondary)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                title="New chat"
-              >
-                <Plus size={18} />
-              </button>
-            </div>
           </div>
+
+          <button onClick={handleNewChat} className="jarvis-new-chat mx-3 mb-4">
+            <Plus size={17} /> <span>New conversation</span><span className="jarvis-new-chat-arrow">↗</span>
+          </button>
 
           {/* Model badge */}
           <button
             onClick={() => setCommandPaletteOpen(true)}
-            className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer"
+            className="jarvis-model-badge mx-3 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer"
             style={{
               background: 'var(--color-bg-secondary)',
               color: 'var(--color-text-secondary)',
@@ -192,7 +181,8 @@ export function Sidebar() {
           </div>
 
           {/* Bottom nav */}
-          <nav className="px-2 pb-3 pt-2 flex flex-col gap-0.5" style={{ borderTop: '1px solid var(--color-border)' }}>
+          <nav className="px-2 pb-3 pt-3 flex flex-col gap-0.5" style={{ borderTop: '1px solid var(--color-border)' }}>
+            <span className="jarvis-nav-label px-3 mb-1">WORKSPACE</span>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
@@ -227,6 +217,20 @@ export function Sidebar() {
                 </button>
               );
             })}
+            <span className="jarvis-nav-label px-3 mt-3 mb-1">QUICK ACCESS</span>
+            <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" className="jarvis-external-nav flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full" title="Open ChatGPT in a separate tab">
+              <ExternalLink size={16} /> ChatGPT Plus <ExternalLink size={12} className="ml-auto" />
+            </a>
+            <a href="https://muse.ai/" target="_blank" rel="noopener noreferrer" className="jarvis-external-nav flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full" title="Open Muse in a separate tab">
+              <ExternalLink size={16} /> Muse <ExternalLink size={12} className="ml-auto" />
+            </a>
+            <button
+              onClick={() => updateSettings({ theme: nextTheme })}
+              className="jarvis-theme-button flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer mt-2"
+              title={`Theme: ${settings.theme} (click for ${nextTheme})`}
+            >
+              <ThemeIcon size={16} /> Appearance <span className="ml-auto text-xs capitalize">{settings.theme}</span>
+            </button>
           </nav>
         </div>
       </aside>

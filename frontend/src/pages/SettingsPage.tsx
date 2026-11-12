@@ -17,6 +17,7 @@ import {
   Search,
   Brain,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { useAppStore, type ThemeMode } from '../lib/store';
 import {
@@ -32,12 +33,129 @@ import {
   saveToolCredentials,
   deleteToolCredential,
   isTauri,
+  fetchChatGPTStatus,
+  startChatGPTConnection,
+  disconnectChatGPT,
+  selectChatGPTProfile,
+  fetchModels,
+  type ChatGPTStatus,
   type InferenceSource,
   type MemoryStats,
 } from '../lib/api';
 import { isAutoUpdateDisabled, setAutoUpdateDisabled } from '../components/Desktop/UpdateChecker';
 
 const CLOUD_KEY_STATUS_CHANGED = 'openjarvis-cloud-key-status-changed';
+
+function ChatGPTConnection() {
+  const [status, setStatus] = useState<ChatGPTStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [showWelcome, setShowWelcome] = useState(false);
+  const setModels = useAppStore((s) => s.setModels);
+  const selectedModel = useAppStore((s) => s.selectedModel);
+
+  useEffect(() => {
+    const outcome = new URLSearchParams(window.location.search).get('chatgpt');
+    if (outcome === 'cancelled') setError('ChatGPT authorization was cancelled. Your local model is still ready.');
+    if (outcome === 'no-plan-access') setError('Signed in, but ChatGPT plan usage was not authorized. Reconnect to grant plan access.');
+    if (outcome === 'connected' && !localStorage.getItem('openjarvis-chatgpt-welcome-seen')) setShowWelcome(true);
+    if (outcome) window.history.replaceState(null, '', '/settings');
+    fetchChatGPTStatus()
+      .then(async (next) => {
+        setStatus(next);
+        if (next.plan_enabled) setModels(await fetchModels());
+      })
+      .catch((err) => setError(err.message || 'Could not check ChatGPT connection.'));
+  }, [setModels]);
+
+  const connect = async (newAccount = false) => {
+    setBusy(true);
+    setError('');
+    try {
+      const url = await startChatGPTConnection(newAccount);
+      window.location.assign(url);
+    } catch (err: any) {
+      setError(err?.message || 'Could not start ChatGPT sign-in.');
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const remoteRevoked = await disconnectChatGPT();
+      setStatus(await fetchChatGPTStatus());
+      setModels(await fetchModels());
+      if (!remoteRevoked) setError('Disconnected locally. Remote revocation could not be confirmed; review connected apps in ChatGPT settings.');
+    } catch (err: any) {
+      setError(err?.message || 'Could not disconnect ChatGPT.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectProfile = async (clientId: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      await selectChatGPTProfile(clientId);
+      setStatus(await fetchChatGPTStatus());
+      setModels(await fetchModels());
+    } catch (err: any) {
+      setError(err?.message || 'Could not switch ChatGPT account.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-2 text-sm">
+      {status?.connected ? (
+        <>
+          <span style={{ color: status.plan_enabled ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
+            {status.plan_enabled ? 'Connected · Using ChatGPT plan' : 'Connected · Plan usage not authorized'}
+          </span>
+          {status.email && <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{status.email}</span>}
+          {status.profiles.filter((profile) => !profile.active).map((profile) => (
+            <button key={profile.client_id} type="button" onClick={() => selectProfile(profile.client_id)} disabled={busy} className="text-xs cursor-pointer" style={{ color: 'var(--color-accent)' }}>
+              Switch to {profile.email || 'saved account'}
+            </button>
+          ))}
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => connect()} disabled={busy} data-oai-siwc-button className="font-medium cursor-pointer" style={{ color: 'var(--color-accent)' }}>
+              {busy ? 'Opening sign-in…' : 'Reconnect'}
+            </button>
+            <button type="button" onClick={() => connect(true)} disabled={busy} data-oai-siwc-button className="font-medium cursor-pointer" style={{ color: 'var(--color-accent)' }}>
+              Add account
+            </button>
+            <button type="button" onClick={disconnect} disabled={busy} className="font-medium cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+              Disconnect
+            </button>
+          </div>
+        </>
+      ) : (
+        <button type="button" onClick={() => connect()} disabled={busy} data-oai-siwc-button className="px-3 py-2 rounded-lg font-semibold cursor-pointer" style={{ background: 'var(--color-text)', color: 'var(--color-surface)' }}>
+          {busy ? 'Opening sign-in…' : 'Continue with ChatGPT'}
+        </button>
+      )}
+      {selectedModel.startsWith('chatgpt/') && status?.plan_enabled && <span className="text-xs">ChatGPT plan model selected for new messages.</span>}
+      <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--color-accent)' }}>
+        Manage usage <ExternalLink size={12} />
+      </a>
+      {error && <span role="alert" className="text-xs" style={{ color: 'var(--color-error)' }}>{error}</span>}
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(20, 20, 35, .5)' }}>
+          <div role="dialog" aria-modal="true" aria-label="ChatGPT plan connected" className="max-w-sm w-full p-6 rounded-2xl shadow-xl" style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            <h3 className="text-lg font-bold">You’re using your ChatGPT plan</h3>
+            <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>Choose a ChatGPT model in the model picker to send chats through your plan. You can review app limits and credit use in ChatGPT settings.</p>
+            <button type="button" className="mt-5 px-4 py-2 rounded-lg font-semibold cursor-pointer" style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }} onClick={() => { localStorage.setItem('openjarvis-chatgpt-welcome-seen', '1'); setShowWelcome(false); }}>Got it</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OllamaModelList() {
   const [models, setModels] = useState<Array<{ name: string; size: number }>>([]);
@@ -478,7 +596,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4">
           {/* Appearance */}
           <Section title="Appearance">
-            <SettingRow label="Theme" description="Choose how OpenJarvis looks">
+            <SettingRow label="Theme" description="Choose how Gideon looks">
               <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--color-bg-secondary)' }}>
                 {themeOptions.map((opt) => {
                   const isActive = settings.theme === opt.value;
@@ -619,10 +737,21 @@ export function SettingsPage() {
             <SettingRow label="Local models (Ollama)" description="Models available for local inference">
               <OllamaModelList />
             </SettingRow>
+            <SettingRow label="ChatGPT Plus" description="Connect your account to use eligible plan models in Gideon. Messages sent with those models go to OpenAI. Local Ollama remains available.">
+              <ChatGPTConnection />
+            </SettingRow>
+            <div className="text-xs px-1 pb-2" style={{ color: 'var(--color-text-tertiary)' }}>
+              ChatGPT plan usage is optional. To prevent use of additional credits after plan limits, review your app limit and credit setting under Manage usage.
+            </div>
+            <SettingRow label="Muse" description="Open Meta's personal agent in a separate tab. Muse's free allowance does not power Gideon chats.">
+              <a href="https://muse.ai/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: 'var(--color-accent)' }}>
+                Open Muse <ExternalLink size={13} />
+              </a>
+            </SettingRow>
             <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
               Run <code className="px-1 py-0.5 rounded text-[11px]" style={{ background: 'var(--color-bg-tertiary)' }}>ollama pull &lt;model-name&gt;</code> in your terminal to add more models
             </div>
-            <SettingRow label="Cloud providers" description="Green dot means API key is configured">
+            <SettingRow label="Cloud providers" description="Optional API providers; API usage may be billed separately from subscriptions">
               <div className="flex flex-wrap gap-3">
                 <CloudProviderStatus label="OpenAI" keyName="OPENAI_API_KEY" />
                 <CloudProviderStatus label="Anthropic" keyName="ANTHROPIC_API_KEY" />
@@ -635,7 +764,10 @@ export function SettingsPage() {
 
           {/* API Keys */}
           <Section title="API Keys">
-            <SettingRow label="OpenAI" description="GPT-4, GPT-3.5, etc.">
+            <div className="text-xs px-1 pb-2" style={{ color: 'var(--color-text-secondary)' }}>
+              ChatGPT Plus does not supply an OpenAI API key. Local models and your connected ChatGPT plan need no keys here. Other providers may offer free tiers, but charges depend on your account and the model you select.
+            </div>
+            <SettingRow label="OpenAI" description="Separately billed OpenAI API, not your ChatGPT Plus plan">
               <ApiKeyInput keyName="OPENAI_API_KEY" placeholder="sk-..." />
             </SettingRow>
             <SettingRow label="Anthropic" description="Claude models">
@@ -654,7 +786,7 @@ export function SettingsPage() {
 
           {/* Tools */}
           <Section title="Tools">
-            <SettingRow label="Web Search" description="Tavily key for web search tool">
+            <SettingRow label="Web Search" description="Works free without a key through You.com; Tavily is an optional key-based alternative">
               <ApiKeyInput keyName="TAVILY_API_KEY" placeholder="tvly-..." toolName="web_search" />
             </SettingRow>
           </Section>
@@ -956,7 +1088,7 @@ export function SettingsPage() {
           <Section title="About">
             <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               <p className="mb-2">
-                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>OpenJarvis</span> — Programming abstractions for on-device AI.
+                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>Gideon</span> — built on the OpenJarvis research framework.
               </p>
               <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
                 Part of Intelligence Per Watt, a research initiative at Stanford SAIL.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenJarvis",
+  "productName": "Gideon",
   "version": "1.0.1",
   "identifier": "com.openjarvis.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "OpenJarvis",
+        "title": "Gideon",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

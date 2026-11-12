@@ -21,6 +21,7 @@ from openjarvis.server.analytics_routes import (
 )
 from openjarvis.server.api_routes import include_all_routes
 from openjarvis.server.comparison import comparison_router
+from openjarvis.server.chatgpt_plan import router as chatgpt_plan_router
 from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.digest_routes import create_digest_router
@@ -475,6 +476,7 @@ def create_app(
                     pass
 
     app.include_router(router)
+    app.include_router(chatgpt_plan_router)
     app.include_router(dashboard_router)
     app.include_router(comparison_router)
     app.include_router(create_connectors_router())

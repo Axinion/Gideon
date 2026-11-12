@@ -14,7 +14,10 @@ export async function* streamChat(
   signal?: AbortSignal,
 ): AsyncGenerator<SSEEvent> {
   const base = getBase();
-  const response = await fetch(`${base}/v1/chat/completions`, {
+  const path = request.model.startsWith('chatgpt/')
+    ? '/v1/chatgpt/completions'
+    : '/v1/chat/completions';
+  const response = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(request),
@@ -22,7 +25,8 @@ export async function* streamChat(
   });
 
   if (!response.ok) {
-    throw new Error(`Chat request failed: ${response.status}`);
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(detail.detail || `Chat request failed: ${response.status}`);
   }
 
   const reader = response.body!.getReader();
@@ -46,6 +50,10 @@ export async function* streamChat(
         } else if (line.startsWith('data: ')) {
           const data = line.slice(6);
           if (data === '[DONE]') return;
+          if (currentEvent === 'error') {
+            const parsed = JSON.parse(data);
+            throw new Error(parsed.error || 'ChatGPT request failed.');
+          }
           yield { event: currentEvent, data };
           currentEvent = undefined;
         } else if (line.trim() === '') {

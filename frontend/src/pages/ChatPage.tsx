@@ -10,7 +10,16 @@ export function ChatPage() {
       <div className="flex-1 min-w-0">
         <ChatArea />
       </div>
-      {systemPanelOpen && <SystemPanel />}
+      {systemPanelOpen && (
+        <>
+          <button
+            className="jarvis-panel-scrim"
+            aria-label="Close system panel"
+            onClick={() => useAppStore.getState().setSystemPanelOpen(false)}
+          />
+          <SystemPanel />
+        </>
+      )}
     </div>
   );
 }

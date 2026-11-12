@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { MessageBubble } from './MessageBubble';
 import { InputArea } from './InputArea';
@@ -6,8 +6,7 @@ import { StreamingDots } from './StreamingDots';
 import { useAppStore } from '../../lib/store';
 import { shouldAutoplayFinishedReply, useTtsStore } from '../../lib/tts';
 import { stripThinkTags } from '../../lib/message-text';
-import { Sparkles, PanelRightOpen, PanelRightClose, Database, MessageSquare, X } from 'lucide-react';
-import { listConnectors } from '../../lib/connectors-api';
+import { Sparkles, PanelRightOpen, PanelRightClose, Database, Lightbulb, PenLine, Code2, ArrowUpRight, Plus, Cpu } from 'lucide-react';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -21,7 +20,11 @@ export function ChatArea() {
   const messages = useAppStore((s) => s.messages);
   const streamState = useAppStore((s) => s.streamState);
   const systemPanelOpen = useAppStore((s) => s.systemPanelOpen);
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const toggleSystemPanel = useAppStore((s) => s.toggleSystemPanel);
+  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
+  const selectedModel = useAppStore((s) => s.selectedModel);
+  const createConversation = useAppStore((s) => s.createConversation);
   const navigate = useNavigate();
   const listRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -87,17 +90,17 @@ export function ChatArea() {
   }, [activeId, messages, streamState.isStreaming, isCurrentChatStreaming, voiceOutputEnabled, voiceAutoplay]);
   const currentStreamContent = isCurrentChatStreaming ? streamState.content : '';
 
-  // Check if any data sources are connected
-  const [hasConnectedSources, setHasConnectedSources] = useState<boolean | null>(null);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const suggestPrompt = (prompt: string) => {
+    window.dispatchEvent(new CustomEvent('jarvis:prompt', { detail: prompt }));
+  };
+
+  const startNewChat = () => {
+    if (messages.length > 0) createConversation(selectedModel);
+    navigate('/');
+  };
 
   useEffect(() => {
-    listConnectors()
-      .then((list) => setHasConnectedSources(list.some((c) => c.connected)))
-      .catch(() => setHasConnectedSources(null));
-  }, []);
-
-  useEffect(() => {
+    if (messages.length === 0 && !isCurrentChatStreaming) return;
     // Sending a message always pins the view to the bottom, even if the
     // user had scrolled up to read earlier messages.
     if (isCurrentChatStreaming && !wasStreaming.current) {
@@ -134,97 +137,61 @@ export function ChatArea() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Toggle bar */}
-      <div className="flex items-center justify-end px-3 py-1.5 shrink-0">
+      {/* Workspace toolbar */}
+      <div className={`jarvis-chat-toolbar shrink-0 ${sidebarOpen ? '' : 'with-sidebar-toggle'}`}>
+        <div className="jarvis-chat-toolbar-title">
+          <span className="jarvis-toolbar-overline">YOUR WORKSPACE</span>
+          <span className="jarvis-toolbar-name">Chat <span className="jarvis-toolbar-separator">/</span> <span>Gideon</span></span>
+        </div>
+        <div className="jarvis-toolbar-actions">
+          <button className="jarvis-local-chip" onClick={() => setCommandPaletteOpen(true)} title="Choose a model">
+            <span className="jarvis-live-dot" /><Cpu size={13} /> <span className="jarvis-local-label">{selectedModel.startsWith('chatgpt/') ? 'Using ChatGPT plan' : selectedModel || 'Local model'}</span>
+          </button>
+          <button onClick={startNewChat} className="jarvis-toolbar-icon" title="New conversation" aria-label="New conversation"><Plus size={18} /></button>
         <button
           onClick={toggleSystemPanel}
-          className="p-1.5 rounded-md transition-colors cursor-pointer"
-          style={{ color: 'var(--color-text-tertiary)' }}
+          className="jarvis-toolbar-icon"
+          aria-label={systemPanelOpen ? 'Hide system panel' : 'Show system panel'}
           title={`${systemPanelOpen ? 'Hide' : 'Show'} system panel (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+I)`}
         >
-          <PanelIcon size={16} />
+          <PanelIcon size={18} />
         </button>
-      </div>
-
-      {/* Data sources banner */}
-      {hasConnectedSources === false && !bannerDismissed && (
-        <div
-          className="mx-4 mb-2 flex items-center gap-3 px-4 py-3 rounded-lg text-sm shrink-0"
-          style={{
-            background: 'var(--color-accent-subtle)',
-            border: '1px solid var(--color-border)',
-          }}
-        >
-          <Database size={16} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-          <span style={{ color: 'var(--color-text-secondary)', flex: 1 }}>
-            Connect your data sources (Gmail, iMessage, Slack, etc.) to get personalized answers.
-          </span>
-          <button
-            onClick={() => navigate('/data-sources')}
-            className="px-3 py-1 rounded text-xs font-medium cursor-pointer"
-            style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)', border: 'none' }}
-          >
-            Connect
-          </button>
-          <button
-            onClick={() => setBannerDismissed(true)}
-            className="p-1 rounded cursor-pointer"
-            style={{ color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none' }}
-          >
-            <X size={14} />
-          </button>
         </div>
-      )}
+      </div>
       <div
         ref={listRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full px-4">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
-            >
-              <Sparkles size={24} />
-            </div>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-              {getGreeting()}
-            </h2>
-            <p className="text-sm text-center max-w-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
-              Ask anything. Your AI runs locally — private, fast, and always available.
-            </p>
-
-            {/* Quick action hints */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => navigate('/data-sources')}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs cursor-pointer transition-colors"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
-              >
-                <Database size={14} style={{ color: 'var(--color-accent)' }} />
-                Connect Data Sources
-              </button>
-              <button
-                onClick={() => { navigate('/data-sources'); setTimeout(() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'messaging' })), 100); }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs cursor-pointer transition-colors"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
-              >
-                <MessageSquare size={14} style={{ color: 'var(--color-accent)' }} />
-                Set Up Messaging Channels
-              </button>
+          <div className="jarvis-welcome-wrap">
+            <div className="jarvis-welcome-content">
+              <div className="jarvis-hero-orb" aria-hidden="true"><Sparkles size={28} strokeWidth={1.6} /></div>
+              <div className="jarvis-eyebrow"><span className="jarvis-live-dot" /> {getGreeting().toUpperCase()} · LOCAL AI DESK</div>
+              <h1 className="jarvis-hero-title">A better place<br /><em>to think.</em></h1>
+              <p className="jarvis-hero-subtitle">Write, explore, and figure things out with an AI that runs right here on your Mac.</p>
+              <div className="jarvis-section-heading"><span>GET STARTED</span><span>Choose a direction ↓</span></div>
+              <div className="jarvis-prompt-grid">
+                <button className="jarvis-prompt-card" onClick={() => suggestPrompt('Help me brainstorm three fresh ideas for a project I could build this month.')}>
+                  <span className="jarvis-prompt-icon purple"><Lightbulb size={19} /></span><span className="jarvis-prompt-copy"><strong>Brainstorm ideas</strong><small>Find a new angle</small></span><ArrowUpRight size={16} />
+                </button>
+                <button className="jarvis-prompt-card" onClick={() => suggestPrompt('Explain a complex topic to me in simple terms, with a concrete example. Ask me which topic first.')}>
+                  <span className="jarvis-prompt-icon orange"><Sparkles size={19} /></span><span className="jarvis-prompt-copy"><strong>Learn something</strong><small>Make it click</small></span><ArrowUpRight size={16} />
+                </button>
+                <button className="jarvis-prompt-card" onClick={() => suggestPrompt('Help me draft a clear and friendly message. Ask me who it is for and what I want to say.')}>
+                  <span className="jarvis-prompt-icon green"><PenLine size={19} /></span><span className="jarvis-prompt-copy"><strong>Draft a message</strong><small>Get the words right</small></span><ArrowUpRight size={16} />
+                </button>
+                <button className="jarvis-prompt-card" onClick={() => suggestPrompt('Help me plan a small coding project. Ask what I want to build and what tools I know.')}>
+                  <span className="jarvis-prompt-icon blue"><Code2 size={19} /></span><span className="jarvis-prompt-copy"><strong>Build a project</strong><small>Start with a plan</small></span><ArrowUpRight size={16} />
+                </button>
+              </div>
+              <div className="jarvis-welcome-footer">
+                <button onClick={() => navigate('/data-sources')}><Database size={15} /> Connect your data <ArrowUpRight size={14} /></button>
+                <div className="jarvis-welcome-external">
+                  <button onClick={() => navigate('/settings')} title="Connect your ChatGPT plan in Settings">Use ChatGPT Plus <ArrowUpRight size={14} /></button>
+                  <a href="https://muse.ai/" target="_blank" rel="noopener noreferrer" title="Opens Muse in a separate tab; this does not connect it to Gideon">Open Muse <ArrowUpRight size={14} /></a>
+                </div>
+              </div>
             </div>
           </div>
         ) : (

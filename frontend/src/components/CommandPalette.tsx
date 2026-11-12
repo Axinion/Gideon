@@ -379,7 +379,7 @@ export function CommandPalette() {
                       className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
                       style={{ background: 'none', border: 'none', padding: 0 }}
                     >
-                      {model.owned_by === 'litellm' ? (
+                      {model.owned_by === 'litellm' || model.owned_by === 'chatgpt' ? (
                         <Cloud size={16} style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
                       ) : (
                         <Cpu size={16} style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
@@ -395,7 +395,7 @@ export function CommandPalette() {
                         </span>
                       )}
                     </button>
-                    {model.owned_by !== 'litellm' && (
+                    {model.owned_by !== 'litellm' && model.owned_by !== 'chatgpt' && (
                       <button
                         onClick={() => handleDelete(model.id)}
                         disabled={isDeleting}
@@ -577,7 +577,7 @@ export function CommandPalette() {
           ) : tab === 'catalogue' ? (
             <span>Models are downloaded from the Ollama registry</span>
           ) : (
-            <span>API keys are stored locally and never sent to OpenJarvis servers</span>
+            <span>API keys are stored locally and never sent to Gideon servers</span>
           )}
         </div>
       </div>
